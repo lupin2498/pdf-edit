@@ -1,5 +1,5 @@
 // Sidebar panels: bookmarks, comments, search and attachments.
-import { h, clear, debounce, uid, cssColor, formatBytes } from '../ui/dom.js';
+import { h, clear, debounce, uid, cssColor, formatBytes, keepPlainKeys } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { promptDialog, confirmDialog, showMenu, toast } from '../ui/dialogs.js';
 import { searchDocument } from '../doc/search.js';
@@ -364,7 +364,7 @@ export class SearchPanel {
     const run = debounce(() => this.run(), 300);
     this.input.addEventListener('input', run);
     this.input.addEventListener('keydown', (e) => {
-      e.stopPropagation();
+      keepPlainKeys(e);
       if (e.key === 'Enter') {
         e.preventDefault();
         if (this.lastQuery !== this.input.value) this.run().then(() => this.step(e.shiftKey ? -1 : 1));

@@ -18,6 +18,11 @@ export function blankPageEntry(width = 595.28, height = 841.89) {
   return { uid: uid('p'), src: null, blank: { width, height }, rotate: 0, crop: null, objects: [], removals: [], imageEdits: [], annotEdits: {} };
 }
 
+function randomPassword() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function needsPreview(entry) {
   return !!entry.src && ((entry.removals && entry.removals.length) || (entry.imageEdits && entry.imageEdits.length) || (entry.annotEdits && Object.keys(entry.annotEdits).length));
 }
@@ -129,9 +134,12 @@ export class DocSession extends EventTarget {
     let userPassword = '';
     let ownerPassword = null;
     if (src.password) {
+      // A password was needed to open the file, so saved copies keep requiring
+      // it, also when it was the owner password (the user password cannot be
+      // recovered from that one).
+      userPassword = src.password;
       const kind = await checkPassword(src.bytes, src.password).catch(() => null);
       if (kind === 'owner') ownerPassword = src.password;
-      else userPassword = src.password;
     }
     return { userPassword, ownerPassword, permissions: src.permissions };
   }
@@ -520,13 +528,19 @@ export class DocSession extends EventTarget {
     const s = this.state.security;
     if (s && s.remove) return null;
     if (s && (s.userPassword || s.ownerPassword)) return s;
+    // Saved copies of an encrypted file stay encrypted with the same
+    // passwords and permissions unless security was removed explicitly.
     const o = this.originalSecurity;
-    if (o && (o.userPassword || o.ownerPassword)) {
+    if (o) {
       const perms = Array.isArray(o.permissions) ? o.permissions : null;
       const has = (flag) => !perms || perms.includes(flag);
+      // An unknown owner password is replaced by a random one so that the
+      // original permission restrictions cannot be lifted with the user
+      // password.
+      if (!o.ownerPassword) o.ownerPassword = randomPassword();
       return {
         userPassword: o.userPassword || '',
-        ownerPassword: o.ownerPassword || o.userPassword,
+        ownerPassword: o.ownerPassword,
         permissions: { printing: has(0x04), modifying: has(0x08), copying: has(0x10), annotating: has(0x20), fillingForms: has(0x100), documentAssembly: has(0x400) },
       };
     }

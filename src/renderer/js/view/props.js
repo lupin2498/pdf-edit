@@ -1,5 +1,5 @@
 // Right-hand properties panel: styles of the selected object or active tool.
-import { h, clear } from '../ui/dom.js';
+import { h, clear, keepPlainKeys } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { colorSwatches, numberInput, slider, segmented, selectInput, propRow, PALETTE, HIGHLIGHT_PALETTE, checkbox } from '../ui/controls.js';
 import { registry } from '../pdf/fonts.js';
@@ -88,7 +88,7 @@ export class PropertiesPanel {
     this.buildControls(obj.type, obj, apply, { obj });
     if (ANNOT_WITH_CONTENTS.has(obj.type) && obj.type !== 'freetext') {
       const ta = h('textarea', { class: 'input', rows: 4, placeholder: t('props.commentPlaceholder') }, obj.contents || '');
-      ta.addEventListener('keydown', (e) => e.stopPropagation());
+      ta.addEventListener('keydown', keepPlainKeys);
       ta.addEventListener('change', () => apply({ contents: ta.value }));
       this.body.appendChild(propRow(t('props.comment'), ta));
     }
@@ -123,7 +123,7 @@ export class PropertiesPanel {
 
   textInput(value, onCommit) {
     const input = h('input', { class: 'input', value });
-    input.addEventListener('keydown', (e) => e.stopPropagation());
+    input.addEventListener('keydown', keepPlainKeys);
     input.addEventListener('change', () => onCommit(input.value));
     return input;
   }
@@ -233,7 +233,7 @@ export class PropertiesPanel {
     this.body.appendChild(propRow(t('props.type'), h('div', null, a.subtype)));
     if (a.titleObj && a.titleObj.str) this.body.appendChild(propRow(t('props.author'), h('div', null, a.titleObj.str)));
     const ta = h('textarea', { class: 'input', rows: 5 }, edit.contents ?? a.contentsObj?.str ?? '');
-    ta.addEventListener('keydown', (e) => e.stopPropagation());
+    ta.addEventListener('keydown', keepPlainKeys);
     ta.addEventListener('change', () => this.docView.setAnnotEdit(sel.pageUid, a.id, { contents: ta.value }));
     this.body.appendChild(propRow(t('props.comment'), ta));
     this.body.appendChild(h('button', { class: 'btn small danger', onclick: () => this.docView.deleteSelection() }, icon('trash'), t('common.delete')));

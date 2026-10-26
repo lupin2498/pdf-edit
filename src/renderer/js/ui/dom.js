@@ -47,6 +47,12 @@ export function on(el, type, fn, opts) {
   return () => el.removeEventListener(type, fn, opts);
 }
 
+// keydown handler for text fields inside the document view: plain keys stay
+// in the field, Ctrl/Cmd shortcuts (save, open, print...) reach the app.
+export function keepPlainKeys(e) {
+  if (!e.ctrlKey && !e.metaKey) e.stopPropagation();
+}
+
 export function debounce(fn, ms) {
   let t = null;
   const wrapped = (...args) => {

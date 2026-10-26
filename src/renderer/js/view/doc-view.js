@@ -1,6 +1,6 @@
 // Document workspace: sidebar, viewer, organizer, properties panel and
 // status bar for one open document.
-import { h, clear, debounce, uid, basename, stripExt, cssColor } from '../ui/dom.js';
+import { h, clear, debounce, uid, basename, stripExt, cssColor, keepPlainKeys } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { showMenu, toast, confirmDialog, promptDialog, openDialog, alertDialog, withBusy, passwordDialog } from '../ui/dialogs.js';
 import { Viewer, ZOOM_STEPS } from './viewer.js';
@@ -107,7 +107,7 @@ export class DocView {
       ),
     );
     this.pageInput.addEventListener('keydown', (e) => {
-      e.stopPropagation();
+      keepPlainKeys(e);
       if (e.key === 'Enter') {
         const n = parseInt(this.pageInput.value, 10);
         if (Number.isFinite(n)) this.viewer.goToIndex(n - 1);
@@ -695,7 +695,7 @@ export class DocView {
       ta,
     );
     ta.addEventListener('keydown', (e) => {
-      e.stopPropagation();
+      keepPlainKeys(e);
       if (e.key === 'Escape') this.closeNotePopup();
     });
     ta.addEventListener('pointerdown', (e) => e.stopPropagation());

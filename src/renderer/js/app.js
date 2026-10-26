@@ -621,6 +621,10 @@ export class App {
       this.openDialog();
       return;
     }
+    if (ctrl && (k === 's' || k === 'p') && inInput && target !== document.body) {
+      // Commit a value being typed into a field (fires its change event).
+      target.blur();
+    }
     if (ctrl && k === 's') {
       e.preventDefault();
       if (doc) this.save(doc, e.shiftKey);

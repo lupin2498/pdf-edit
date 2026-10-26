@@ -120,6 +120,25 @@ test('reopens the encrypted file with its password', async () => {
   assert.equal((await docState(page)).pages.length, 4);
 });
 
+test('saving the reopened file keeps its open password', async () => {
+  const { page } = ctx;
+  await page.evaluate(() => {
+    const d = window.__app.activeDoc;
+    d.session.rotatePages([d.session.state.pages[0].uid], 90);
+  });
+  const out = path.join(OUT, '05-resaved.pdf');
+  fs.rmSync(out, { force: true });
+  await queueDialog(page, out);
+  await page.keyboard.press('Control+Shift+S');
+  await waitToast(page, /05-resaved/);
+  const bytes = fs.readFileSync(out);
+  await assert.rejects(PDFDocument.load(bytes), /encrypted/i);
+  if (hasPoppler()) {
+    assert.throws(() => pdfText(bytes));
+    assert.match(pdfText(bytes, { password: 'abc123' }), /brown fox/);
+  }
+});
+
 test('no errors were logged', () => {
   assert.deepEqual(appErrors(ctx.logs), []);
 });
