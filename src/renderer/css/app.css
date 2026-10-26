@@ -44,6 +44,13 @@
   color-scheme: dark;
 }
 
+/* Icons default to a small size; components override it where needed. */
+svg.ico {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -383,9 +390,14 @@ textarea,
 }
 .home-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 32px;
+}
+@media (max-width: 1250px) {
+  .home-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .home-card {
   display: flex;
@@ -433,6 +445,12 @@ textarea,
   color: var(--muted);
   margin-bottom: 28px;
   background: var(--panel);
+}
+.home-drop svg.ico {
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 8px;
 }
 .home-drop.over {
   border-color: var(--accent);
@@ -1534,6 +1552,11 @@ input[type='radio'] {
 }
 .file-row:last-child {
   border-bottom: 0;
+}
+.file-row > svg.ico {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
 }
 .file-row .fr-name {
   flex: 1;

@@ -9,11 +9,11 @@ const require = createRequire(import.meta.url);
 const { _electron: electron } = require('playwright-core');
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-export async function launchApp({ files = [], userData = null, show = false } = {}) {
+export async function launchApp({ files = [], userData = null, show = false, env = {} } = {}) {
   const dataDir = userData || fs.mkdtempSync(path.join(os.tmpdir(), 'pdfedit-e2e-'));
   const app = await electron.launch({
     args: [ROOT, ...files, '--no-sandbox'],
-    env: { ...process.env, PDFEDIT_TEST: '1', PDFEDIT_USER_DATA: dataDir, PDFEDIT_SHOW: show ? '1' : '0', ELECTRON_ENABLE_LOGGING: '1' },
+    env: { ...process.env, PDFEDIT_TEST: '1', PDFEDIT_USER_DATA: dataDir, PDFEDIT_SHOW: show ? '1' : '0', ELECTRON_ENABLE_LOGGING: '1', ...env },
     timeout: 60000,
   });
   const page = await app.firstWindow();

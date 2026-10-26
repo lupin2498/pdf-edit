@@ -149,8 +149,10 @@ function createWindow() {
   mainWindow.on('move', debounce(remember, 500));
 
   let allowClose = false;
+  // Tests close the app directly unless they exercise the unsaved-changes prompt.
+  const guardClose = !isTest || process.env.PDFEDIT_CLOSE_GUARD === '1';
   mainWindow.on('close', (e) => {
-    if (allowClose || isTest) return;
+    if (allowClose || !guardClose) return;
     e.preventDefault();
     mainWindow.webContents.send('app:request-close');
   });

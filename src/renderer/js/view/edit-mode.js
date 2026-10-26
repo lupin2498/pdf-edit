@@ -4,8 +4,7 @@ import { viewRect, userRect } from './viewport.js';
 import { buildTextBlocks } from '../doc/text-blocks.js';
 import { allImages } from '../../../core/interpreter.js';
 import { rectToRectMatrix, transformRect, multiply } from '../../../core/matrix.js';
-import { getShaper } from '../pdf/fonts.js';
-import { registry } from '../pdf/fonts.js';
+import { getShaper, registry, loadSystemFonts } from '../pdf/fonts.js';
 import { needsPreview } from '../doc/session.js';
 import { t } from '../i18n.js';
 
@@ -148,6 +147,8 @@ export class EditMode {
   }
 
   async editBlock(pv, block, e) {
+    // Match against installed fonts too (they load shortly after startup).
+    await loadSystemFonts();
     const font = { family: registry.matchFamily(block.font?.name || '', block.font || {}), bold: !!block.font?.bold, italic: !!block.font?.italic };
     const size = Math.round(block.size * 10) / 10;
     const shaper = await getShaper(font, block.text);
