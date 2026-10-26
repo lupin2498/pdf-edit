@@ -97,7 +97,9 @@ export class DocSession extends EventTarget {
     const id = `s${++sourceCounter}`;
     let permissions = null;
     try {
-      permissions = await pdf.getPermissions();
+      // pdf.js returns a Set of PermissionFlag values (null when unrestricted).
+      const perms = await pdf.getPermissions();
+      permissions = perms ? [...perms] : null;
     } catch {
       permissions = null;
     }
