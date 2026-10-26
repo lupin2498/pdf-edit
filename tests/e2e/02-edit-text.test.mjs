@@ -142,6 +142,19 @@ test('edits a paragraph of a LibreOffice document', { skip: !fs.existsSync(path.
   assert.match(text, /Second paragraph in English/);
 });
 
+test('lines with a different colour are not merged into a paragraph', async () => {
+  const { page } = ctx;
+  await queueDialog(page, [path.join(FIXTURES, 'standard.pdf')]);
+  await page.keyboard.press('Control+o');
+  await page.waitForFunction(() => window.__app.activeDoc?.session.name === 'standard.pdf', null, { timeout: 20000 });
+  await page.click('.ribbon-tab[data-rtab="edit"]');
+  await page.waitForSelector(`${ACTIVE} .edit-block`, { timeout: 15000 });
+  await page.click(`${ACTIVE} .props-panel .seg button:nth-child(1)`);
+  await page.waitForTimeout(500);
+  const titles = await page.$$eval(`${ACTIVE} .page:first-child .edit-block`, (els) => els.map((e) => e.title));
+  assert.deepEqual(titles, ['Page 1 heading', 'The quick brown fox jumps over the lazy dog. Second line with KEEPME and REMOVEME words.', 'Third line is here.']);
+});
+
 test('no errors were logged', () => {
   assert.deepEqual(appErrors(ctx.logs), []);
 });

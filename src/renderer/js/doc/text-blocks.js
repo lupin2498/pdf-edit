@@ -69,15 +69,19 @@ export function buildTextBlocks(textContent, { mode = 'paragraph', analysis = nu
     items.push({ str: it.str, o, size, u, v, w: it.width || 0, asc, desc, fontName: it.fontName, hasEOL: it.hasEOL, mirrored: a * d - b * c < 0 });
   }
   const blocks = [];
+  const runs = analysis ? allTextRuns(analysis).map((r) => r.run) : null;
   for (const o of ORIENTATIONS) {
     const group = items.filter((it) => it.o === o && !it.mirrored);
     if (!group.length) continue;
     const lines = buildLines(group);
+    // Lines only join a paragraph when they share font and colour, so editing
+    // a paragraph never restyles a differently styled line next to it.
+    for (const l of lines) l.style = runs ? dominantStyle(runs, localRectToUser(o, l.rect))?.key : dominantFontName(l);
     const paragraphs = mode === 'line' ? lines.map((l) => [l]) : groupParagraphs(lines);
     for (const para of paragraphs) blocks.push(makeBlock(para, o));
   }
   // Attach style information from the content analysis.
-  if (analysis) attachStyles(blocks, analysis);
+  if (runs) attachStyles(blocks, runs);
   blocks.forEach((b, i) => (b.id = `blk${i}`));
   return blocks;
 }
@@ -138,6 +142,7 @@ function groupParagraphs(lines) {
       const last = p[p.length - 1];
       const sizeRatio = Math.abs(last.size - line.size) / Math.max(last.size, line.size);
       if (sizeRatio > 0.2) continue;
+      if (last.style !== line.style) continue;
       const dy = last.v - line.v;
       if (dy <= last.size * 0.5 || dy > Math.max(last.size, line.size) * 1.75) continue;
       const pu0 = Math.min(...p.map((l) => l.u0));
@@ -196,25 +201,38 @@ function makeBlock(lines, o) {
   };
 }
 
-function attachStyles(blocks, analysis) {
-  const runs = allTextRuns(analysis).map((r) => r.run);
-  for (const b of blocks) {
-    const counts = new Map();
-    for (const run of runs) {
-      if (!run.bbox) continue;
-      if (run.bbox[2] < b.rect[0] || run.bbox[0] > b.rect[2] || run.bbox[3] < b.rect[1] || run.bbox[1] > b.rect[3]) continue;
-      let n = 0;
-      for (const g of run.glyphs) {
-        if (g.cx >= b.rect[0] && g.cx <= b.rect[2] && g.cy >= b.rect[1] && g.cy <= b.rect[3]) n++;
-      }
-      if (!n) continue;
-      const key = `${run.font.name}|${run.fillRgb.map((v) => v.toFixed(2)).join(',')}`;
-      const cur = counts.get(key) || { n: 0, run };
-      cur.n += n;
-      counts.set(key, cur);
+// Dominant font and fill colour of the glyphs inside `rect` (user space).
+function dominantStyle(runs, rect) {
+  const counts = new Map();
+  for (const run of runs) {
+    if (!run.bbox) continue;
+    if (run.bbox[2] < rect[0] || run.bbox[0] > rect[2] || run.bbox[3] < rect[1] || run.bbox[1] > rect[3]) continue;
+    let n = 0;
+    for (const g of run.glyphs) {
+      if (g.cx >= rect[0] && g.cx <= rect[2] && g.cy >= rect[1] && g.cy <= rect[3]) n++;
     }
-    let best = null;
-    for (const c of counts.values()) if (!best || c.n > best.n) best = c;
+    if (!n) continue;
+    const key = `${(run.font.name || '').replace(/^[A-Z]{6}\+/, '')}|${run.fillRgb.map((v) => v.toFixed(2)).join(',')}`;
+    const cur = counts.get(key) || { n: 0, run, key };
+    cur.n += n;
+    counts.set(key, cur);
+  }
+  let best = null;
+  for (const c of counts.values()) if (!best || c.n > best.n) best = c;
+  return best;
+}
+
+function dominantFontName(line) {
+  const counts = new Map();
+  for (const it of line.items) counts.set(it.fontName, (counts.get(it.fontName) || 0) + it.str.length);
+  let best = null;
+  for (const [name, n] of counts) if (!best || n > best[1]) best = [name, n];
+  return best ? best[0] : undefined;
+}
+
+function attachStyles(blocks, runs) {
+  for (const b of blocks) {
+    const best = dominantStyle(runs, b.rect);
     if (best) {
       const f = best.run.font;
       b.font = { name: f.name, bold: !!f.bold, italic: !!f.italic, serif: !!f.serif, mono: !!f.mono, family: f.family };

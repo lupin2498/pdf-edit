@@ -4,7 +4,9 @@ import { PDFDocument } from '@cantoo/pdf-lib';
 import { parseContentStream, PdfName, PdfString, PdfDictValue, buildContentStream } from '../../src/core/content-stream.js';
 import { analyzePageContent, applyContentEdits } from '../../src/core/content-editor.js';
 import { allImages, allTextRuns } from '../../src/core/interpreter.js';
-import { ensureFixtures, fixture, pdfText, wordBoxes, findWord, approx, writeOut } from './helpers.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { ensureFixtures, fixture, pdfText, wordBoxes, findWord, approx, writeOut, FIXTURES } from './helpers.mjs';
 
 const enc = new TextEncoder();
 
@@ -144,7 +146,9 @@ test('rewrites text inside form XObjects without touching outside text', async (
   assert.ok(text.includes('a form XObject'));
 });
 
-test('edits text in a LibreOffice generated document', async () => {
+test('edits text in a LibreOffice generated document', async (t) => {
+  await ensureFixtures();
+  if (!fs.existsSync(path.join(FIXTURES, 'libreoffice.pdf'))) return t.skip('LibreOffice (soffice) is not installed');
   const { before, after, out } = await removeWords('libreoffice.pdf', ['words']);
   writeOut('libreoffice-removed.pdf', out);
   const text = pdfText(out);

@@ -141,10 +141,10 @@ export class App {
       edit: [
         [toolBtn('edit', 'edit', t('tool.edit')), toolBtn('addText', 'addText', t('tool.addText')), cmd('addImage', 'image', t('tool.addImage'), () => F.insert.pickImage(doc), { edit: true }), toolBtn('link', 'link', t('tool.link')), toolBtn('whiteout', 'whiteout', t('tool.whiteout'))],
         [
-          { id: 'watermark', icon: 'watermark', label: t('marks.watermark'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'watermark') },
-          { id: 'background', icon: 'background', label: t('marks.background'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'background') },
-          { id: 'headerFooter', icon: 'headerFooter', label: t('marks.headerFooter'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'headerFooter') },
-          { id: 'bates', icon: 'bates', label: t('marks.bates'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'bates') },
+          { id: 'watermark', icon: 'watermark', label: t('ribbon.watermark'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'watermark') },
+          { id: 'background', icon: 'background', label: t('ribbon.background'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'background') },
+          { id: 'headerFooter', icon: 'headerFooter', label: t('ribbon.headerFooter'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'headerFooter') },
+          { id: 'bates', icon: 'bates', label: t('ribbon.bates'), needsDoc: true, edit: true, menu: () => F.marks.menu(doc, 'bates') },
         ],
         [toolBtn('crop', 'crop', t('tool.crop'))],
       ],
