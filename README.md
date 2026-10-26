@@ -60,6 +60,8 @@ Trên Linux cần Wine (wine64 + wine32): `USE_SYSTEM_WINE=true xvfb-run -a npm 
 
 Workflow GitHub Actions `.github/workflows/build.yml` chạy test và build bộ cài trên Windows cho mỗi lần push.
 
+Kết quả kiểm thử: xem [TEST_REPORT.md](TEST_REPORT.md).
+
 ## Kiến trúc
 
 - `src/main` – tiến trình chính Electron (cửa sổ, hộp thoại, đọc/ghi file, phông hệ thống, giao thức `app://`).

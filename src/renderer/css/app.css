@@ -892,10 +892,10 @@ textarea,
   outline: 1px solid rgba(220, 90, 0, 0.9);
 }
 
-.hide-form-highlight .annotationLayer .textWidgetAnnotation :is(input, textarea),
-.hide-form-highlight .annotationLayer .choiceWidgetAnnotation select,
-.hide-form-highlight .annotationLayer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input {
-  background-color: transparent;
+/* pdf.js tints form fields through this variable. */
+.hide-form-highlight .annotationLayer {
+  --annotation-unfocused-field-background: none;
+  --annotation-unfocused-field-filter: none;
 }
 .viewer.no-annot-layer .annotationLayer {
   pointer-events: none;

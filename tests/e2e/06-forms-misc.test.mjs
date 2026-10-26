@@ -48,6 +48,18 @@ test('filled values survive re-rendering the page', async () => {
   await page.waitForTimeout(800);
 });
 
+test('the field highlight can be switched off and on', async () => {
+  const { page } = ctx;
+  const tint = () => page.$eval(textInput, (e) => getComputedStyle(e).backgroundImage !== 'none');
+  assert.equal(await tint(), true);
+  await page.click('.ribbon-tab[data-rtab="form"]');
+  await page.click('.rb-btn[data-cmd="highlightFields"]');
+  assert.equal(await tint(), false);
+  await page.click('.rb-btn[data-cmd="highlightFields"]');
+  assert.equal(await tint(), true);
+  await page.click('.ribbon-tab[data-rtab="home"]');
+});
+
 test('moves an existing annotation', async () => {
   const { page } = ctx;
   const el = page.locator(`${ACTIVE} .obj.existing-annot`).first();
