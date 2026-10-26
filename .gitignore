@@ -1,0 +1,8 @@
+node_modules/
+release/
+dist/
+src/renderer/dist/
+*.log
+.DS_Store
+tests/output/
+tests/fixtures/generated/
