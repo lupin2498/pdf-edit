@@ -179,7 +179,9 @@ export class EditMode {
       color: block.color || [0, 0, 0],
       align: block.align,
       lineHeight,
-      wrap: true,
+      // A single line grows sideways while typing (like the original line);
+      // paragraphs keep their width and wrap.
+      wrap: nLines > 1,
       fromBlock: removalId,
       created: now,
       modified: now,

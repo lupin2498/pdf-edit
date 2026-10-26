@@ -75,7 +75,8 @@ export class ThumbnailService {
     } else if (entry.src) {
       const page = await this.session.getRenderPage(entry);
       const vp = makeViewport(page, { viewBox: geom.view, scale: scale * dpr, rotation: geom.rotation });
-      await page.render({ canvasContext: ctx, canvas, viewport: vp, annotationMode: pdfjsLib.AnnotationMode.ENABLE_FORMS }).promise;
+      // Thumbnails have no form layer: draw fields with their current values.
+      await page.render({ canvasContext: ctx, canvas, viewport: vp, annotationMode: pdfjsLib.AnnotationMode.ENABLE_STORAGE }).promise;
     }
     const bitmap = canvas.transferToImageBitmap();
     if (this.cache.size > 400) {

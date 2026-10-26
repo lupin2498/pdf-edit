@@ -201,7 +201,10 @@ export class DocView {
       if (cur && !this.organizer.selection.size) this.organizer.selectOnly(cur.uid);
       this.organizerEl.focus({ preventScroll: true });
     } else {
-      this.viewer.updateVisible();
+      requestAnimationFrame(() => {
+        if (this.viewer.zoomMode !== 'custom') this.viewer.applyZoomMode(true);
+        this.viewer.updateVisible();
+      });
       this.viewerEl.focus({ preventScroll: true });
     }
     this.app.updateRibbonState();
@@ -360,7 +363,10 @@ export class DocView {
     if (this.overlay.editing) this.overlay.commitEditing();
     if (tool !== 'edit' && this.editMode.active) this.editMode.setActive(false);
     this.tools.setTool(tool, options);
-    if (tool === 'edit') this.editMode.setActive(true);
+    if (tool === 'edit') {
+      this.editMode.setActive(true);
+      this.props.update();
+    }
     if (tool !== 'select') this.overlay.clearSelection();
   }
 
@@ -409,13 +415,13 @@ export class DocView {
 
   addObject(pv, obj, { select = true, transient = false } = {}) {
     const id = this.session.addObject(pv.entry.uid, obj, `add_${obj.type}`);
-    if (transient) this.transient.set(id, { original: obj.text || '', created: true });
+    if (transient) this.transient.set(id, { original: obj.text || '', created: true, seq: this.session.changeSeq });
     if (select) this.overlay.select(pv.entry.uid, id);
     return id;
   }
 
   markTransient(id, info) {
-    this.transient.set(id, info);
+    this.transient.set(id, { ...info, seq: this.session.changeSeq });
   }
 
   startEditingById(pv, id) {
@@ -445,28 +451,24 @@ export class DocView {
     const obj = found.object;
     const tr = this.transient.get(id);
     this.transient.delete(id);
+    // True while nothing else changed since the box was created or the text
+    // block was taken over, so the edit can be folded into that undo step.
+    const pristine = !!tr && tr.seq === this.session.changeSeq;
+    const dropCreation = () => {
+      this.session.undo();
+      this.session.redoStack.pop();
+    };
     const unchanged = text === (obj.text || '');
-    if (tr && unchanged && !tr.styleChanged && tr.original === text) {
+    if (pristine && unchanged && tr.original === text) {
       // Nothing changed: drop the creation step entirely.
-      if (this.session.undoStack.length) {
-        this.session.undo();
-        this.session.redoStack.pop();
-      }
+      dropCreation();
       this.overlay.selection = null;
       this.props.update();
       return;
     }
     if (!text.trim()) {
-      if (obj.fromBlock && !tr) {
-        this.session.removeObjects([id], 'deleteText');
-      } else if (tr && tr.created) {
-        if (this.session.undoStack.length) {
-          this.session.undo();
-          this.session.redoStack.pop();
-        }
-      } else {
-        this.session.removeObjects([id], 'deleteText');
-      }
+      if (pristine && tr.created) dropCreation();
+      else this.session.removeObjects([id], 'deleteText', { merge: pristine });
       this.overlay.selection = null;
       this.props.update();
       return;
@@ -476,7 +478,7 @@ export class DocView {
       return;
     }
     const rect = await this.fitTextRect(obj, text);
-    this.session.updateObject(id, { text, rect }, 'editText');
+    this.session.updateObject(id, { text, rect }, 'editText', { merge: pristine });
   }
 
   async commitTextResize(obj, patch) {

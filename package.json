@@ -13,33 +13,48 @@
     "start": "npm run build:renderer && electron .",
     "test": "node --test \"tests/unit/**/*.test.mjs\"",
     "test:e2e": "npm run build:renderer && node --test --test-concurrency=1 \"tests/e2e/**/*.test.mjs\"",
-    "dist:win": "npm run build:renderer && electron-builder --win --x64",
-    "dist:dir": "npm run build:renderer && electron-builder --win --x64 --dir"
+    "dist:win": "npm run build:renderer && electron-builder --win --x64 --publish never",
+    "dist:dir": "npm run build:renderer && electron-builder --win --x64 --dir --publish never"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@cantoo/fontkit": "^2.0.12",
     "@cantoo/pdf-lib": "^2.11.1",
-    "fflate": "^0.8.3",
-    "pdfjs-dist": "^6.4.299"
-  },
-  "devDependencies": {
     "electron": "^44.6.0",
     "electron-builder": "^26.17.0",
     "esbuild": "^0.28.2",
+    "fflate": "^0.8.3",
+    "pdfjs-dist": "^6.4.299",
     "playwright-core": "^1.63.0"
   },
   "build": {
     "appId": "com.lupin2498.pdfedit",
     "productName": "PDF Edit",
+    "copyright": "Copyright © 2026 lupin2498",
     "directories": {
       "output": "release",
       "buildResources": "build"
     },
     "files": [
       "src/main/**",
+      "src/renderer/index.html",
+      "src/renderer/dist/**",
+      "src/assets/**",
       "package.json"
     ],
+    "asar": true,
+    "npmRebuild": false,
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "description": "PDF Document",
+        "mimeType": "application/pdf",
+        "role": "Editor"
+      }
+    ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -47,12 +62,33 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "requestedExecutionLevel": "asInvoker",
+      "legalTrademarks": "PDF Edit"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
-    }
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PDF Edit",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "vi_VN",
+        "en_US"
+      ],
+      "multiLanguageInstaller": true,
+      "displayLanguageSelector": false,
+      "include": "build/installer.nsh",
+      "artifactName": "PDF-Edit-Setup-${version}-x64.${ext}",
+      "uninstallDisplayName": "PDF Edit ${version}"
+    },
+    "publish": null
   }
 }

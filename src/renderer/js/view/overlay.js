@@ -7,6 +7,7 @@ import { viewRect, userRect } from './viewport.js';
 import { getShaper, cssNameFor } from '../pdf/fonts.js';
 import { layoutTextBox, frameForRect, localToUser } from '../../../core/text-layout.js';
 import { arrowHeadPoints } from '../../../core/graphics.js';
+import { stampLabelLayout } from '../../../core/annotations.js';
 import { MARK_TYPES, layoutMark, collectTexts } from '../../../core/page-marks.js';
 import { t } from '../i18n.js';
 
@@ -329,20 +330,18 @@ export class Overlay {
     const sub = obj.subLabel || '';
     const c = cssColor(obj.color || [0.8, 0.1, 0.1]);
     const shaper = await getShaper({ family: obj.font?.family || 'Liberation Sans', bold: true }, label + sub);
-    const mainSize = Math.max(4, Math.min(f.height * (sub ? 0.42 : 0.55), (f.width * 0.86) / Math.max(0.1, shaper.measure(label))));
     const bw = Math.max(1, Math.min(f.width, f.height) * 0.06);
     const svg = svgEl('svg', { width: f.width * s, height: f.height * s, viewBox: `0 0 ${f.width} ${f.height}`, style: 'overflow:visible;pointer-events:none' });
     svg.appendChild(svgEl('rect', { x: bw / 2, y: bw / 2, width: f.width - bw, height: f.height - bw, rx: Math.min(f.width, f.height) * 0.18, fill: 'none', stroke: c, 'stroke-width': bw }));
-    const lines = sub ? [label, sub] : [label];
-    const lh = mainSize * (sub ? 1.15 : 1);
-    const top = (f.height - lines.length * lh) / 2;
-    lines.forEach((text, i) => {
-      const w = shaper.measure(text) * mainSize;
-      const el = svgEl('text', { x: (f.width - w) / 2, y: top + i * lh + (lh - (shaper.metrics.ascent - shaper.metrics.descent) * mainSize) / 2 + shaper.metrics.ascent * mainSize, 'font-family': `"${cssNameFor(shaper.descriptor)}"`, 'font-size': mainSize, fill: c });
+    const { ascent, descent } = shaper.metrics;
+    for (const line of stampLabelLayout(f.width, f.height, label, sub, shaper.measure)) {
+      const w = shaper.measure(line.text) * line.size;
+      const y = line.top + (line.size - (ascent - descent) * line.size) / 2 + ascent * line.size;
+      const el = svgEl('text', { x: (f.width - w) / 2, y, 'font-family': `"${cssNameFor(shaper.descriptor)}"`, 'font-size': line.size, fill: c });
       el.setAttribute('xml:space', 'preserve');
-      el.textContent = text;
+      el.textContent = line.text;
       svg.appendChild(el);
-    });
+    }
     box.appendChild(svg);
   }
 

@@ -367,6 +367,7 @@ textarea,
   background: var(--bg);
 }
 .home-inner {
+  width: 100%;
   max-width: 1100px;
   margin: 0 auto;
   padding: 32px 32px 48px;
@@ -1809,4 +1810,16 @@ input[type='radio'] {
     max-width: 100%;
     max-height: 100%;
   }
+}
+
+/* Check boxes / radio buttons whose state canvases are not available (edited
+   page previews) show their state with a plain mark. */
+.annotationLayer .buttonWidgetAnnotation.checkBox:not(:has(canvas)) input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"), var(--annotation-unfocused-field-background);
+  background-size: 85% 85%, auto;
+  background-position: center, 0 0;
+  background-repeat: no-repeat, repeat;
+}
+.annotationLayer .buttonWidgetAnnotation.radioButton:not(:has(canvas)) input:checked {
+  background-image: radial-gradient(circle, #000 0 30%, transparent 34%), var(--annotation-unfocused-field-background);
 }

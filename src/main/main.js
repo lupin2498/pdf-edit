@@ -48,7 +48,7 @@ function resolveAppUrl(urlString) {
     rel = rel.slice('assets/'.length);
   }
   const full = path.normalize(path.join(base, rel));
-  if (!full.startsWith(base)) return null;
+  if (!full.startsWith(base + path.sep)) return null;
   return full;
 }
 
@@ -115,7 +115,7 @@ function createWindow() {
     show: false,
     title: 'PDF Edit',
     backgroundColor: '#f3f4f8',
-    icon: path.join(APP_ROOT, 'build', 'icon.png'),
+    icon: path.join(ASSETS_DIR, 'icon.png'),
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#1f2a44', symbolColor: '#ffffff', height: 40 },
     webPreferences: {

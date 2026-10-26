@@ -14,6 +14,10 @@ export const ZOOM_STEPS = [0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 6.4;
 
+function mulMatrix(a, b) {
+  return [a[0] * b[0] + a[1] * b[2], a[0] * b[1] + a[1] * b[3], a[2] * b[0] + a[3] * b[2], a[2] * b[1] + a[3] * b[3], a[4] * b[0] + a[5] * b[2] + b[4], a[4] * b[1] + a[5] * b[3] + b[5]];
+}
+
 export class PageView {
   constructor(viewer, entry, index) {
     this.viewer = viewer;
@@ -152,7 +156,7 @@ export class PageView {
       this.loading.textContent = t('viewer.renderError');
       return;
     }
-    if (token !== this.renderToken) return;
+    if (token !== this.renderToken || this.session.closed) return;
     const vp = this.makeViewport(pdfPage);
     this.viewport = vp;
     this.applySize();
@@ -167,18 +171,24 @@ export class PageView {
     const ctx = canvas.getContext('2d', { alpha: false });
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Annotations with their own canvas (check boxes, notes, ...) are drawn
+    // into separate canvases by pdf.js.
+    const ownCanvases = new Map();
+    this.annotationCanvases = null;
     if (pdfPage) {
-      this.renderTask = pdfPage.render({
-        canvasContext: ctx,
-        canvas,
-        viewport: vp,
-        transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null,
-        annotationMode: pdfjsLib.AnnotationMode.ENABLE_FORMS,
-      });
       try {
+        this.renderTask = pdfPage.render({
+          canvasContext: ctx,
+          canvas,
+          viewport: vp,
+          transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null,
+          annotationMode: pdfjsLib.AnnotationMode.ENABLE_FORMS,
+          annotationCanvasMap: ownCanvases,
+        });
         await this.renderTask.promise;
+        if (ownCanvases.size) await this.placeOwnCanvases(ownCanvases, pdfPage, vp, outputScale, ctx);
       } catch (e) {
-        if (e && e.name === 'RenderingCancelledException') return;
+        if ((e && e.name === 'RenderingCancelledException') || this.session.closed) return;
         console.error('render failed', e);
         this.loading.textContent = t('viewer.renderError');
         return;
@@ -220,24 +230,83 @@ export class PageView {
     this.viewer.emit('layersrendered', { pageView: this });
   }
 
-  async renderAnnotationLayer(token) {
+  // Source annotations shown as HTML: form fields and links that were not
+  // moved or deleted (those are drawn from the edited page preview).
+  async layerAnnotations() {
     const entry = this.entry;
-    if (!entry.src) return;
+    if (!entry.src) return [];
     const annotations = await this.session.getSourceAnnotations(entry);
     const edits = entry.annotEdits || {};
-    const list = annotations.filter((a) => {
+    return annotations.filter((a) => {
       if (edits[a.id] && (edits[a.id].deleted || edits[a.id].dx || edits[a.id].dy)) return false;
       return a.annotationType === pdfjsLib.AnnotationType.WIDGET || a.annotationType === pdfjsLib.AnnotationType.LINK;
     });
+  }
+
+  // Hands the own canvases of form fields to the annotation layer and paints
+  // all others back onto the page canvas.
+  async placeOwnCanvases(ownCanvases, pdfPage, vp, outputScale, ctx) {
+    const fromSource = !needsPreview(this.entry);
+    const formsShown = !this.session.readOnlyForms;
+    const layerIds = fromSource ? new Set((await this.layerAnnotations()).map((a) => a.id)) : new Set();
+    const attached = new Map();
+    const rest = [];
+    for (const [id, c] of ownCanvases) {
+      if (layerIds.has(id) && (formsShown || !Array.isArray(c))) attached.set(id, c);
+      else rest.push([id, c]);
+    }
+    this.annotationCanvases = attached;
+    if (!rest.length) return;
+    const annots = await pdfPage.getAnnotations({ intent: 'display' });
+    const byId = new Map(annots.map((a) => [a.id, a]));
+    const storage = fromSource ? this.session.sources.get(this.entry.src.doc)?.pdf.annotationStorage : null;
+    for (const [id, c] of rest) {
+      const data = byId.get(id);
+      if (!data || !data.rect) continue;
+      let cv = c;
+      if (Array.isArray(c)) {
+        // Check box / radio button states. With interactive forms the HTML
+        // control shows the live state (see app.css).
+        if (formsShown) continue;
+        const stored = storage?.getRawValue(id);
+        const on = stored && 'value' in stored ? !!stored.value : data.checkBox ? data.fieldValue === data.exportValue : data.fieldValue === data.buttonValue;
+        cv = c.find((x) => x.getAttribute('data-canvas-name') === (on ? 'checked' : 'unchecked'));
+        if (!cv) continue;
+      }
+      if (!cv.width || !cv.height) continue;
+      const [x1, y1, x2, y2] = data.rect;
+      // Own canvas pixels -> PDF user space -> viewport -> device pixels.
+      const toPdf = [(x2 - x1) / cv.width, 0, 0, -(y2 - y1) / cv.height, x1, y2];
+      const m = mulMatrix(mulMatrix(toPdf, vp.transform), [outputScale, 0, 0, outputScale, 0, 0]);
+      ctx.save();
+      ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+      ctx.drawImage(cv, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  async renderAnnotationLayer(token) {
+    const entry = this.entry;
+    if (!entry.src) return;
+    const list = await this.layerAnnotations();
     if (!list.length || token !== this.renderToken) return;
     const srcPage = await this.session.getPdfPage(entry.src.doc, entry.src.index);
     const src = this.session.sources.get(entry.src.doc);
     const vp = makeViewport(srcPage, { viewBox: this.geometry.view, scale: this.viewer.scale * CSS_UNITS, rotation: this.geometry.rotation });
     const layerVp = vp.clone({ dontFlip: true });
+    // pdf.js shows the original appearance text of a re-created text field
+    // unless the storage carries a formatted value; keep it in sync with what
+    // the user typed so values survive re-rendering.
+    const storage = src.pdf.annotationStorage;
+    for (const a of list) {
+      if (a.fieldType !== 'Tx') continue;
+      const raw = storage.getRawValue(a.id);
+      if (raw && typeof raw.value === 'string' && raw.formattedValue !== raw.value) storage.setValue(a.id, { formattedValue: raw.value });
+    }
     const layer = new pdfjsLib.AnnotationLayer({
       div: this.annotationLayerDiv,
       accessibilityManager: null,
-      annotationCanvasMap: null,
+      annotationCanvasMap: this.annotationCanvases?.size ? this.annotationCanvases : null,
       annotationEditorUIManager: null,
       page: srcPage,
       viewport: layerVp,
@@ -284,6 +353,8 @@ export class Viewer extends EventTarget {
     this.container.addEventListener('scroll', this.onScroll, { passive: true });
     this.resizeObserver = new ResizeObserver(
       debounce(() => {
+        // Ignore size changes while the viewer is hidden (e.g. organizer mode).
+        if (!this.container.clientWidth || !this.container.clientHeight) return;
         if (this.zoomMode !== 'custom') this.applyZoomMode(true);
         else this.updateVisible();
       }, 80),
@@ -520,6 +591,7 @@ export class Viewer extends EventTarget {
   }
 
   pumpRender() {
+    if (this.destroyed) return;
     while (this.rendering < 3 && this.renderQueue.size) {
       // Prefer pages closest to the current page.
       let best = null;
@@ -567,6 +639,7 @@ export class Viewer extends EventTarget {
   // ------------------------------------------------------------------ zoom
 
   fitScale(mode) {
+    if (!this.container.clientWidth) return this.scale;
     const pv = this.pageViewAt(this.currentIndex) || this.pageViewAt(0);
     const g = (pv && pv.geometry) || this.defaultGeometry;
     const availW = Math.max(100, this.container.clientWidth - PAD_X * 2 - 14);
@@ -677,6 +750,8 @@ export class Viewer extends EventTarget {
   }
 
   destroy() {
+    this.destroyed = true;
+    this.renderQueue.clear();
     this.resizeObserver.disconnect();
     for (const pv of this.pageViews.values()) pv.release();
   }

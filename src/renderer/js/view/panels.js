@@ -355,7 +355,7 @@ export class SearchPanel {
           { class: 'form-inline' },
           h('button', { class: 'btn small', onclick: () => this.step(-1) }, icon('chevronUp')),
           h('button', { class: 'btn small', onclick: () => this.step(1) }, icon('chevronDown')),
-          h('button', { class: 'btn small', onclick: () => this.docView.searchAndRedact(this.input.value, this.options()) }, icon('redact'), t('search.redactAll')),
+          h('button', { class: 'btn small redact-results', onclick: () => this.docView.searchAndRedact(this.input.value, this.options()) }, icon('redact'), t('search.redactAll')),
         ),
         this.status,
       ),

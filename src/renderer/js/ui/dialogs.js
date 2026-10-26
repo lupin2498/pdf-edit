@@ -221,6 +221,10 @@ export function toast(message, { type = 'info', timeout = 3200, action = null } 
     toastsEl = h('div', { class: 'toasts' });
     document.body.appendChild(toastsEl);
   }
+  // The same message again replaces the previous toast instead of stacking.
+  for (const old of toastsEl.querySelectorAll(`.toast.${type}`)) {
+    if (old.firstChild && old.firstChild.textContent === message) old.remove();
+  }
   const el = h('div', { class: `toast ${type}` }, h('span', null, message));
   if (action) el.appendChild(h('button', { onclick: () => { action.onClick(); el.remove(); } }, action.label));
   toastsEl.appendChild(el);

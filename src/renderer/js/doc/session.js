@@ -78,7 +78,7 @@ export class DocSession extends EventTarget {
   }
 
   get dirty() {
-    return this.state !== this.savedState || this.formDirty || this.isNewUnsaved || this.externalDirty;
+    return !!(this.state !== this.savedState || this.formDirty || this.isNewUnsaved || this.externalDirty);
   }
 
   get pages() {
@@ -277,15 +277,20 @@ export class DocSession extends EventTarget {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
 
-  update(label, fn) {
+  // `merge` folds the change into the previous undo step (e.g. typing into a
+  // text box that was just created).
+  update(label, fn, { merge = false } = {}) {
     const before = this.state;
     const next = structuredClone(before);
     const result = fn(next);
     if (result === false) return false;
     const diff = diffStates(before, next);
     if (!diff.structure && !diff.objects.size && !diff.content.size && !diff.meta && !diff.outline && !diff.security) return false;
-    this.undoStack.push({ label, state: before });
-    if (this.undoStack.length > 200) this.undoStack.shift();
+    if (!merge || !this.undoStack.length) {
+      this.undoStack.push({ label, state: before });
+      if (this.undoStack.length > 200) this.undoStack.shift();
+    }
+    this.changeSeq = (this.changeSeq || 0) + 1;
     this.redoStack = [];
     this.state = next;
     this.emit('change', { ...diff, label });
@@ -311,6 +316,7 @@ export class DocSession extends EventTarget {
   undo() {
     const item = this.undoStack.pop();
     if (!item) return null;
+    this.changeSeq = (this.changeSeq || 0) + 1;
     this.redoStack.push({ label: item.label, state: this.state });
     const before = this.state;
     this.state = item.state;
@@ -321,6 +327,7 @@ export class DocSession extends EventTarget {
   redo() {
     const item = this.redoStack.pop();
     if (!item) return null;
+    this.changeSeq = (this.changeSeq || 0) + 1;
     this.undoStack.push({ label: item.label, state: this.state });
     const before = this.state;
     this.state = item.state;
@@ -442,7 +449,7 @@ export class DocSession extends EventTarget {
     return o.id;
   }
 
-  updateObject(id, patch, label = 'editObject') {
+  updateObject(id, patch, label = 'editObject', options = {}) {
     return this.update(label, (s) => {
       for (const p of s.pages) {
         const o = (p.objects || []).find((x) => x.id === id);
@@ -452,10 +459,10 @@ export class DocSession extends EventTarget {
         }
       }
       return false;
-    });
+    }, options);
   }
 
-  removeObjects(ids, label = 'deleteObject') {
+  removeObjects(ids, label = 'deleteObject', options = {}) {
     const set = new Set(ids);
     return this.update(label, (s) => {
       let changed = false;
@@ -466,7 +473,7 @@ export class DocSession extends EventTarget {
         if (p.objects.length !== before) changed = true;
       }
       return changed;
-    });
+    }, options);
   }
 
   // ------------------------------------------------------------------ forms
@@ -476,10 +483,11 @@ export class DocSession extends EventTarget {
     for (const [id, src] of this.sources) {
       const storage = src.pdf.annotationStorage;
       if (!storage || !storage.size) continue;
-      const all = storage.getAll ? storage.getAll() : null;
-      if (!all) continue;
+      const ser = storage.serializable;
+      const map = ser && ser.map instanceof Map ? ser.map : null;
+      if (!map) continue;
       const values = {};
-      for (const [annotId, v] of Object.entries(all)) {
+      for (const [annotId, v] of map) {
         if (!v || typeof v !== 'object') continue;
         if ('value' in v) values[annotId] = { value: v.value };
       }
@@ -491,9 +499,12 @@ export class DocSession extends EventTarget {
   resetForms() {
     for (const src of this.sources.values()) {
       const storage = src.pdf.annotationStorage;
-      if (storage && storage.resetModified) {
+      if (!storage || !storage.size) continue;
+      const ser = storage.serializable;
+      const keys = ser && ser.map instanceof Map ? [...ser.map.keys()] : [];
+      for (const key of keys) {
         try {
-          for (const key of [...(storage.getAll ? Object.keys(storage.getAll() || {}) : [])]) storage.remove(key);
+          storage.remove(key);
         } catch {
           /* ignore */
         }

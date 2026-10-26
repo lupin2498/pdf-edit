@@ -189,6 +189,22 @@ function shapeAppearance(obj, collector) {
   return ops.join('\n');
 }
 
+// Label layout of a text stamp in its local frame (y down): a bold label,
+// optionally followed by a smaller second line, centered in the box. Shared
+// by the on-screen preview and the saved appearance stream.
+export function stampLabelLayout(width, height, label, sub, measure) {
+  const avail = width * 0.84;
+  const mainSize = Math.max(4, Math.min(height * (sub ? 0.4 : 0.55), avail / Math.max(0.1, measure(label))));
+  if (!sub) return [{ text: label, size: mainSize, top: (height - mainSize) / 2 }];
+  const subSize = Math.max(3, Math.min(mainSize * 0.6, avail / Math.max(0.1, measure(sub))));
+  const gap = mainSize * 0.1;
+  const top = (height - (mainSize + gap + subSize)) / 2;
+  return [
+    { text: label, size: mainSize, top },
+    { text: sub, size: subSize, top: top + mainSize + gap },
+  ];
+}
+
 function stampTextAppearance(obj, embedded, collector) {
   // Rounded border with centered label; `embedded` = { key, font, size, layoutWidth }
   const f = frameForRect(obj.rect, obj.rot || 0);
@@ -367,30 +383,16 @@ export async function createAnnotation(ctx, page, obj) {
         apOps = ['q', gs ? `/${gs} gs` : '', `${matrixStr(imageMatrix(rect, obj.rot || 0))} cm`, `/${key} Do`, 'Q'].filter(Boolean).join('\n');
       } else {
         const label = obj.label || 'APPROVED';
-        const shaper = await ctx.registry.getShaper(obj.font?.family || 'Liberation Sans', true, false, label + (obj.subLabel || ''));
-        const f = frameForRect(rect, obj.rot || 0);
-        const border = stampTextAppearance(obj, null, collector);
         const sub = obj.subLabel || '';
-        const mainSize = Math.max(4, Math.min(f.height * (sub ? 0.42 : 0.55), (f.width * 0.86) / Math.max(0.1, shaper.measure(label))));
-        const textObj = {
-          rect,
-          rot: obj.rot || 0,
-          text: sub ? `${label}\n${sub}` : label,
-          size: mainSize,
-          color: obj.color || [0.8, 0.1, 0.1],
-          align: 'center',
-          lineHeight: sub ? 1.15 : 1.0,
-          opacity: obj.opacity ?? 1,
-          wrap: false,
-        };
-        // Vertically center the label.
-        const lines = sub ? 2 : 1;
-        const blockH = lines * mainSize * textObj.lineHeight;
-        const padTop = Math.max(0, (f.height - blockH) / 2);
-        const frame = { ...f, origin: localToUser(f, 0, padTop) };
-        const subShaper = shaper;
-        const inner = await textBlockOps({ ...textObj, wrap: true }, subShaper, ctx.embedFace, collector, { frame: { ...frame, height: f.height - padTop } });
-        apOps = `${border}\n${inner.ops}`;
+        const shaper = await ctx.registry.getShaper(obj.font?.family || 'Liberation Sans', true, false, label + sub);
+        const f = frameForRect(rect, obj.rot || 0);
+        const parts = [stampTextAppearance(obj, null, collector)];
+        for (const line of stampLabelLayout(f.width, f.height, label, sub, shaper.measure)) {
+          const textObj = { rect, rot: obj.rot || 0, text: line.text, size: line.size, color: obj.color || [0.8, 0.1, 0.1], align: 'center', lineHeight: 1, opacity: obj.opacity ?? 1, wrap: true };
+          const frame = { ...f, origin: localToUser(f, 0, line.top), height: line.size };
+          parts.push((await textBlockOps(textObj, shaper, ctx.embedFace, collector, { frame })).ops);
+        }
+        apOps = parts.join('\n');
       }
       break;
     }
