@@ -81,7 +81,7 @@ export function colorToRgb(space, comps) {
  *   textRuns: [{opIndex, op, elements, glyphs, font, ...}],
  *   images: [{opIndex, name, ref, inline, ctm, quad, bbox}],
  *   forms: [{opIndex, name, ref, matrix, ctm, model}],
- *   paths: [{startOp, endOp, bbox}],
+ *   paths: [{startOp, endOp, bbox, segments}],  segments: straight [x0, y0, x1, y1]
  * }
  */
 export function interpretContent(opts) {
@@ -126,6 +126,10 @@ export function interpretContent(opts) {
   const mcStack = [];
   let pathPoints = [];
   let pathStartOp = -1;
+  // Straight segments of the current path (user space), e.g. table rules.
+  let pathSegments = [];
+  let lastPoint = null;
+  let subpathStart = null;
 
   const fontDict = resources ? getDict(context, resources, 'Font') : undefined;
   const xobjDict = resources ? getDict(context, resources, 'XObject') : undefined;
@@ -246,6 +250,7 @@ export function interpretContent(opts) {
         startOp: pathStartOp,
         endOp: opIndex,
         bbox: boundsOfPoints(pathPoints),
+        segments: pathSegments,
         kind,
         ctm: gs.ctm,
         mc: currentMc(),
@@ -253,11 +258,19 @@ export function interpretContent(opts) {
     }
     pathPoints = [];
     pathStartOp = -1;
+    pathSegments = [];
+    lastPoint = null;
+    subpathStart = null;
   };
 
   const addPathPoint = (opIndex, x, y) => {
     if (pathStartOp < 0) pathStartOp = opIndex;
-    pathPoints.push(applyPoint(gs.ctm, x, y));
+    const p = applyPoint(gs.ctm, x, y);
+    pathPoints.push(p);
+    return p;
+  };
+  const addSegment = (a, b) => {
+    if (collectPaths && a && b && pathSegments.length < 2000) pathSegments.push([a[0], a[1], b[0], b[1]]);
   };
 
   for (let i = 0; i < ops.length; i++) {
@@ -428,28 +441,42 @@ export function interpretContent(opts) {
         break;
       }
       case 'm':
-      case 'l':
-        addPathPoint(i, num(0), num(1));
+        lastPoint = subpathStart = addPathPoint(i, num(0), num(1));
+        break;
+      case 'l': {
+        const p = addPathPoint(i, num(0), num(1));
+        addSegment(lastPoint, p);
+        lastPoint = p;
+        break;
+      }
+      case 'h':
+        addSegment(lastPoint, subpathStart);
+        lastPoint = subpathStart;
         break;
       case 'c':
         addPathPoint(i, num(0), num(1));
         addPathPoint(i, num(2), num(3));
-        addPathPoint(i, num(4), num(5));
+        lastPoint = addPathPoint(i, num(4), num(5));
         break;
       case 'v':
       case 'y':
         addPathPoint(i, num(0), num(1));
-        addPathPoint(i, num(2), num(3));
+        lastPoint = addPathPoint(i, num(2), num(3));
         break;
       case 're': {
         const x = num(0);
         const y = num(1);
         const w = num(2);
         const h = num(3);
-        addPathPoint(i, x, y);
-        addPathPoint(i, x + w, y + h);
-        addPathPoint(i, x + w, y);
-        addPathPoint(i, x, y + h);
+        const a = addPathPoint(i, x, y);
+        const c = addPathPoint(i, x + w, y + h);
+        const b = addPathPoint(i, x + w, y);
+        const d = addPathPoint(i, x, y + h);
+        addSegment(a, b);
+        addSegment(b, c);
+        addSegment(c, d);
+        addSegment(d, a);
+        lastPoint = subpathStart = a;
         break;
       }
       case 'S':
@@ -470,6 +497,8 @@ export function interpretContent(opts) {
       case 'n':
         pathPoints = [];
         pathStartOp = -1;
+        pathSegments = [];
+        lastPoint = subpathStart = null;
         break;
       case 'BI': {
         const quad = [applyPoint(gs.ctm, 0, 0), applyPoint(gs.ctm, 1, 0), applyPoint(gs.ctm, 1, 1), applyPoint(gs.ctm, 0, 1)];

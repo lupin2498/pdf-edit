@@ -1,5 +1,5 @@
 // Groups pdf.js text items into editable lines and paragraphs (Edit mode).
-import { allTextRuns } from '../../../core/interpreter.js';
+import { allTextRuns, allPaths } from '../../../core/interpreter.js';
 
 const ORIENTATIONS = [0, 90, 180, 270];
 
@@ -70,10 +70,11 @@ export function buildTextBlocks(textContent, { mode = 'paragraph', analysis = nu
   }
   const blocks = [];
   const runs = analysis ? allTextRuns(analysis).map((r) => r.run) : null;
+  const segments = analysis ? allPaths(analysis).flatMap((p) => p.pathItem.segments || []) : [];
   for (const o of ORIENTATIONS) {
     const group = items.filter((it) => it.o === o && !it.mirrored);
     if (!group.length) continue;
-    const lines = buildLines(group);
+    const lines = buildLines(group, columnRules(segments, o));
     // Lines only join a paragraph when they share font and colour, so editing
     // a paragraph never restyles a differently styled line next to it.
     for (const l of lines) l.style = runs ? dominantStyle(runs, localRectToUser(o, l.rect))?.key : dominantFontName(l);
@@ -86,11 +87,25 @@ export function buildTextBlocks(textContent, { mode = 'paragraph', analysis = nu
   return blocks;
 }
 
-function buildLines(items) {
-  const sorted = items.slice().sort((p, q) => q.v - p.v || p.u - q.u);
+// Vertical rules (table cell borders) in the text frame of orientation o.
+function columnRules(segments, o) {
+  const rules = [];
+  for (const [x0, y0, x1, y1] of segments) {
+    const p = toLocal(o, x0, y0);
+    const q = toLocal(o, x1, y1);
+    if (Math.abs(p[0] - q[0]) > 1 || Math.abs(p[1] - q[1]) < 4) continue;
+    rules.push({ u: (p[0] + q[0]) / 2, v0: Math.min(p[1], q[1]), v1: Math.max(p[1], q[1]) });
+  }
+  return rules;
+}
+
+function buildLines(items, rules = []) {
+  // Whitespace-only items are skipped: pdf.js emits wide "fake space" items
+  // for column gaps, which would glue table cells into one line. Word
+  // spacing is restored from the gaps below.
+  const sorted = items.filter((it) => it.str.trim()).sort((p, q) => q.v - p.v || p.u - q.u);
   const lines = [];
   for (const it of sorted) {
-    if (!it.str.trim() && !lines.length) continue;
     let placed = false;
     for (let k = lines.length - 1; k >= 0 && k >= lines.length - 6; k--) {
       const line = lines[k];
@@ -99,6 +114,10 @@ function buildLines(items) {
       const gap = it.u - line.u1;
       const maxGap = Math.max(line.size, it.size) * 1.6;
       if (gap > maxGap || it.u + it.w < line.u0 - 0.5) continue;
+      // A column rule between the line and the item separates table cells.
+      const lo = it.v + it.desc * it.size;
+      const hi = it.v + it.asc * it.size;
+      if (gap > 0 && rules.some((r) => r.u > line.u1 - 0.5 && r.u < it.u + 0.5 && r.v0 < hi && r.v1 > lo)) continue;
       line.items.push(it);
       line.u1 = Math.max(line.u1, it.u + it.w);
       line.u0 = Math.min(line.u0, it.u);
@@ -106,7 +125,6 @@ function buildLines(items) {
       break;
     }
     if (!placed) {
-      if (!it.str.trim()) continue;
       lines.push({ items: [it], u0: it.u, u1: it.u + it.w, v: it.v, size: it.size, asc: it.asc, desc: it.desc });
     }
   }
@@ -132,11 +150,18 @@ function buildLines(items) {
   return lines.filter((l) => l.text.trim());
 }
 
+// Lines starting with a list marker ("1.", "a)", bullets) begin a paragraph.
+const LIST_ITEM = /^\s*(?:\d{1,3}[.)]|[a-zA-Z][.)]|[•·▪◦‣●○■□–—*-])\s/;
+
 function groupParagraphs(lines) {
   const sorted = lines.slice().sort((a, b) => b.v - a.v || a.u0 - b.u0);
   const paras = [];
   for (const line of sorted) {
     let target = null;
+    if (LIST_ITEM.test(line.text)) {
+      paras.push([line]);
+      continue;
+    }
     for (let k = paras.length - 1; k >= 0 && k >= paras.length - 8; k--) {
       const p = paras[k];
       const last = p[p.length - 1];
