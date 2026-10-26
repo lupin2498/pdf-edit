@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master, 'ccr-*']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install system packages
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils xvfb
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: End-to-end tests
+        run: xvfb-run -a npm run test:e2e
+      - name: Upload test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: tests/output/
+
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build NSIS installer
+        run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Edit-Setup-x64
+          path: release/*.exe
