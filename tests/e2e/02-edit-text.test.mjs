@@ -17,6 +17,9 @@ after(async () => {
 });
 
 async function clickBlock(page, prefix, where = 'end') {
+  await page
+    .waitForFunction(([sel, p]) => [...document.querySelectorAll(sel)].some((e) => e.title.startsWith(p)), [`${ACTIVE} .edit-block`, prefix], { timeout: 10000 })
+    .catch(() => {});
   const b = await page.evaluate(
     ([sel, p]) => {
       const el = [...document.querySelectorAll(sel)].find((e) => e.title.startsWith(p));
@@ -24,7 +27,7 @@ async function clickBlock(page, prefix, where = 'end') {
     },
     [`${ACTIVE} .edit-block`, prefix],
   );
-  assert.ok(b, `block "${prefix}" not found`);
+  assert.ok(b, `block "${prefix}" not found in ${JSON.stringify(await page.$$eval(`${ACTIVE} .edit-block`, (els) => els.map((e) => e.title)))}`);
   const x = where === 'end' ? b.x + b.width - 3 : b.x + 3;
   await page.mouse.click(x, b.y + b.height / 2);
   await page.waitForSelector('.text-editor', { timeout: 5000 });
@@ -116,6 +119,26 @@ test('saves the edited text into the PDF', { skip: !hasPoppler() && 'poppler not
   assert.equal(text.match(/Xin chào thế giới/g).length, 1);
   assert.equal(text.match(/Dòng thứ ba giữ nguyên/g).length, 1);
   assert.equal((await docState(page)).dirty, false);
+});
+
+test('typing continues when the page re-renders during editing', async () => {
+  const { page } = ctx;
+  // The add-text tool is still active from an earlier test.
+  await page.click('.rb-btn[data-cmd="edit"]');
+  await clickBlock(page, 'Dòng thứ ba');
+  await page.keyboard.press('End');
+  await page.keyboard.type(' A');
+  // Re-rendering the page (e.g. when an edit preview finishes) must not
+  // steal the focus from the editor.
+  await page.evaluate(() => {
+    const d = window.__app.activeDoc;
+    for (const pv of d.viewer.pageViews.values()) if (pv.visible) d.overlay.renderPage(pv);
+  });
+  await page.keyboard.type('BC');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const texts = (await docState(page)).pages[0].objects.filter((o) => o.type === 'text').map((o) => o.text);
+  assert.ok(texts.includes('Dòng thứ ba giữ nguyên. ABC'), texts.join('|'));
 });
 
 test('edits a paragraph of a LibreOffice document', { skip: !fs.existsSync(path.join(FIXTURES, 'libreoffice.pdf')) && 'fixture missing' }, async () => {

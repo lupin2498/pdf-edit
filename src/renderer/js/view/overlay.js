@@ -105,8 +105,12 @@ export class Overlay {
   renderPage(pv) {
     const entry = this.session.page(pv.entry.uid) || pv.entry;
     const layer = pv.objectsLayer;
-    const keepEditor = this.editing && this.editing.pageUid === entry.uid ? this.editing.el : null;
-    clear(layer);
+    const editor = this.editing && this.editing.pageUid === entry.uid ? this.editing.el : null;
+    // The text editor stays attached: detaching it would drop the focus (and
+    // commit the edit) while the user is typing.
+    const keepEditor = editor && editor.parentNode === layer ? editor : null;
+    for (const child of [...layer.children]) if (child !== keepEditor) child.remove();
+    if (editor && !keepEditor) layer.appendChild(editor);
     if (!pv.geometry) return;
     const vp = pv.getViewport();
     const token = (pv.overlayToken = (pv.overlayToken || 0) + 1);
@@ -136,9 +140,8 @@ export class Overlay {
       if (this.hidden.has(obj.id)) continue;
       const o = this.temp.get(obj.id) ? { ...obj, ...this.temp.get(obj.id) } : obj;
       const el = this.buildObject(pv, vp, o);
-      if (el) layer.appendChild(el);
+      if (el) layer.insertBefore(el, editor);
     }
-    if (keepEditor) layer.appendChild(keepEditor);
     if (this.selection && this.selection.pageUid === entry.uid && this.selection.kind === 'object') {
       const obj = (entry.objects || []).find((x) => x.id === this.selection.id);
       if (obj) {
